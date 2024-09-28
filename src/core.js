@@ -25,8 +25,8 @@ function splitHTMLLines(htmlString) {
 }
 
 function createNodes(parsedLines) {
-  return parsedLines.map(
-    ({ tagName, child, attributes }) => new vNode(tagName, attributes, child)
+  return parsedLines.map(({ tagName, child, attributes, children }) =>
+    new vNode(tagName, attributes, child, children ? createNodes(children) : [])
   );
 }
 
@@ -40,18 +40,27 @@ function parseHTML(htmlString) {
   const tagName = element.tagName.toLowerCase();
   const child = element.textContent.trim();
   const attributes = {};
+  const children = [];
+
   for (const attr of element.attributes) {
     attributes[attr.name] = attr.value;
   }
 
-  return { tagName, child, attributes };
+  if (element.children.length > 0) {
+    Array.from(element.children).forEach((childElement) => {
+      children.push(parseHTML(childElement.outerHTML));
+    });
+  }
+
+  return { tagName, child, attributes, children };
 }
 
 class vNode {
-  constructor(tagName, attributes = {}, textContent = null) {
+  constructor(tagName, attributes = {}, textContent = null, children = []) {
     this.tagName = tagName;
     this.attributes = attributes;
     this.textContent = textContent;
+    this.children = children;
     this.el = null;
   }
 
@@ -60,7 +69,16 @@ class vNode {
     Object.entries(this.attributes).forEach(([key, value]) => {
       this.el.setAttribute(key, value);
     });
-    this.el.textContent = this.textContent;
+
+    if (this.children.length > 0) {
+      this.children.forEach((childNode) => {
+        const childElement = childNode.createElement();
+        this.el.appendChild(childElement);
+      });
+    } else if (this.textContent) {
+      this.el.textContent = this.textContent;
+    }
+
     return this.el;
   }
 
