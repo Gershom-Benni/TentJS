@@ -1,3 +1,6 @@
+const rootElement = document.createElement('div');
+rootElement.id = 'root';
+document.body.appendChild(rootElement); 
 function html(htmlString, vdom = null) {
   const parsedLines = splitHTMLLines(htmlString);
   const newNodes = createNodes(parsedLines);
@@ -5,7 +8,7 @@ function html(htmlString, vdom = null) {
   if (vdom) {
     vdom.diffAndUpdate(newNodes);
   } else {
-    vdom = new vDom(newNodes);
+    vdom = new vDom(newNodes,rootElement);
     vdom.render();
   }
 
@@ -82,8 +85,10 @@ class vNode {
 }
 
 class vDom {
-  constructor(nodes = []) {
+  constructor(nodes = [], rootElement = null) {
     this.dom = nodes;
+    this.rootElement = rootElement || document.createElement('div');
+    document.body.appendChild(this.rootElement);
   }
 
   addNode(node) {
@@ -103,14 +108,14 @@ class vDom {
     });
 
     if (this.dom.length > newNodes.length) {
-      this.dom.slice(newNodes.length).forEach((node) => this.removeNode(node));
+      this.dom.slice(newNodes.length).forEach(node => this.removeNode(node));
       this.dom = this.dom.slice(0, newNodes.length);
     }
   }
 
   mountNode(node) {
     const element = node.createElement();
-    document.body.appendChild(element);
+    this.rootElement.appendChild(element);
   }
 
   removeNode(node) {
@@ -120,7 +125,7 @@ class vDom {
   }
 
   render() {
-    this.dom.forEach((node) => {
+    this.dom.forEach(node => {
       if (!node.el) {
         this.mountNode(node);
       }
@@ -128,22 +133,4 @@ class vDom {
   }
 }
 
-// const htmlString = `
-//   <div class="container" id="main">Gershom Benni P</div>
-//   <span style="color: red;">This is a test</span>
-//   <p>Another paragraph</p>
-// `;
-
-// // Initial render and setup
-// let vdom = html(htmlString);
-
-// // Simulating changes to the HTML string
-// const newHtmlString = `
-//   <div class="container" id="main">Updated Content</div>
-//   <span style="color: green;">Changed style</span>
-//   <p>Another paragraph</p>
-//   <div><h1>Hello i am God tier programmer</h1></div>
-// `;
-
-// // Update the existing vDom with the new HTML
-// vdom = html(newHtmlString, vdom);
+export { html };
