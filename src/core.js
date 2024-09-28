@@ -1,36 +1,38 @@
-function splitHTMLLines(htmlString) {
-  const lines = htmlString.split('\n').map(line => line.trim()).filter(line => line);
-  const parsedLines = lines.map(line => parseHTML(line));
-  return parsedLines.filter(result => result !== null);
-}
-
-function html(htmlString, vdom) {
+function html(htmlString, vdom = null) {
   const parsedLines = splitHTMLLines(htmlString);
-  const newNodes = createNode(parsedLines);
-  const newVDom = new vDom(newNodes);
+  const newNodes = createNodes(parsedLines);
+
   if (vdom) {
-    vdom.diffAndUpdate(newVDom);
+    vdom.diffAndUpdate(newNodes);
   } else {
-    newVDom.render();
+    vdom = new vDom(newNodes);
+    vdom.render();
   }
 
-  return newVDom;
+  return vdom;
 }
 
-function createNode(parsedLines) {
-  return parsedLines.map(({ tagName, child, attributes }) =>
-    new vNode(tagName, attributes, child)
+function splitHTMLLines(htmlString) {
+  const lines = htmlString
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line);
+  const parsedLines = lines.map((line) => parseHTML(line));
+  return parsedLines.filter((result) => result !== null);
+}
+
+function createNodes(parsedLines) {
+  return parsedLines.map(
+    ({ tagName, child, attributes }) => new vNode(tagName, attributes, child)
   );
 }
 
 function parseHTML(htmlString) {
   const parser = new DOMParser();
-  const doc = parser.parseFromString(htmlString, 'text/html');
+  const doc = parser.parseFromString(htmlString, "text/html");
   const element = doc.body.firstElementChild;
 
-  if (!element) {
-    return null;
-  }
+  if (!element) return null;
 
   const tagName = element.tagName.toLowerCase();
   const child = element.textContent.trim();
@@ -42,27 +44,43 @@ function parseHTML(htmlString) {
   return { tagName, child, attributes };
 }
 
-// Virtual DOM Node Class
 class vNode {
   constructor(tagName, attributes = {}, textContent = null) {
     this.tagName = tagName;
     this.attributes = attributes;
     this.textContent = textContent;
+    this.el = null;
   }
 
-  isEqual(node) {
-    if (this.tagName !== node.tagName) return false;
-    if (this.textContent !== node.textContent) return false;
+  createElement() {
+    this.el = document.createElement(this.tagName);
+    Object.entries(this.attributes).forEach(([key, value]) => {
+      this.el.setAttribute(key, value);
+    });
+    this.el.textContent = this.textContent;
+    return this.el;
+  }
 
-    const thisAttributes = Object.entries(this.attributes);
-    const nodeAttributes = Object.entries(node.attributes);
-    if (thisAttributes.length !== nodeAttributes.length) return false;
+  updateElement(newNode) {
+    if (this.el && this.textContent !== newNode.textContent) {
+      this.el.textContent = newNode.textContent;
+    }
+    Object.entries(newNode.attributes).forEach(([key, value]) => {
+      if (this.el.getAttribute(key) !== value) {
+        this.el.setAttribute(key, value);
+      }
+    });
+  }
 
-    return thisAttributes.every(([key, value]) => node.attributes[key] === value);
+  isEqual(newNode) {
+    return (
+      this.tagName === newNode.tagName &&
+      this.textContent === newNode.textContent &&
+      JSON.stringify(this.attributes) === JSON.stringify(newNode.attributes)
+    );
   }
 }
 
-// Virtual DOM Class
 class vDom {
   constructor(nodes = []) {
     this.dom = nodes;
@@ -72,82 +90,60 @@ class vDom {
     this.dom.push(node);
   }
 
-  diffAndUpdate(newVDom) {
-    const minLength = Math.min(this.dom.length, newVDom.dom.length);
-
-    for (let i = 0; i < minLength; i++) {
-      const oldNode = this.dom[i];
-      const newNode = newVDom.dom[i];
-
-      if (!oldNode.isEqual(newNode)) {
-        this.updateRealDOM(oldNode, newNode); 
-        this.dom[i] = newNode;
+  diffAndUpdate(newNodes) {
+    newNodes.forEach((newNode, index) => {
+      const oldNode = this.dom[index];
+      if (!oldNode) {
+        this.addNode(newNode);
+        this.mountNode(newNode);
+      } else if (!oldNode.isEqual(newNode)) {
+        oldNode.updateElement(newNode);
+        this.dom[index] = newNode;
       }
-    }
-
-    if (newVDom.dom.length > this.dom.length) {
-      newVDom.dom.slice(this.dom.length).forEach(node => {
-        this.addNode(node);
-        this.createRealDOM(node);
-      });
-    }
-
-    if (this.dom.length > newVDom.dom.length) {
-      this.dom.slice(newVDom.dom.length).forEach(node => this.removeRealDOM(node));
-      this.dom = this.dom.slice(0, newVDom.dom.length);
-    }
-  }
-
-  updateRealDOM(oldNode, newNode) {
-    const element = document.querySelector(
-      `${oldNode.tagName}[${Object.entries(oldNode.attributes)
-        .map(([key, value]) => `${key}="${value}"`)
-        .join(' ')}]`
-    );
-
-    if (element) {
-      Object.entries(newNode.attributes).forEach(([key, value]) => {
-        element.setAttribute(key, value);
-      });
-      if (newNode.textContent !== oldNode.textContent) {
-        element.textContent = newNode.textContent;
-      }
-    }
-  }
-
-  createRealDOM(node) {
-    const element = document.createElement(node.tagName);
-    Object.entries(node.attributes).forEach(([key, value]) => {
-      element.setAttribute(key, value);
     });
-    element.textContent = node.textContent;
+
+    if (this.dom.length > newNodes.length) {
+      this.dom.slice(newNodes.length).forEach((node) => this.removeNode(node));
+      this.dom = this.dom.slice(0, newNodes.length);
+    }
+  }
+
+  mountNode(node) {
+    const element = node.createElement();
     document.body.appendChild(element);
   }
 
-  removeRealDOM(node) {
-    const element = document.querySelector(
-      `${node.tagName}[${Object.entries(node.attributes)
-        .map(([key, value]) => `${key}="${value}"`)
-        .join(' ')}]`
-    );
-
-    if (element) {
-      element.remove();
+  removeNode(node) {
+    if (node.el) {
+      node.el.remove();
     }
   }
 
   render() {
-    const fragment = document.createDocumentFragment();
-    this.dom.forEach(node => {
-      const element = document.createElement(node.tagName);
-      Object.entries(node.attributes).forEach(([key, value]) => {
-        element.setAttribute(key, value);
-      });
-      if (node.textContent) {
-        element.textContent = node.textContent;
+    this.dom.forEach((node) => {
+      if (!node.el) {
+        this.mountNode(node);
       }
-      fragment.appendChild(element);
     });
-    document.body.appendChild(fragment);
   }
 }
+
+// const htmlString = `
+//   <div class="container" id="main">Gershom Benni P</div>
+//   <span style="color: red;">This is a test</span>
+//   <p>Another paragraph</p>
+// `;
+
+// // Initial render and setup
+// let vdom = html(htmlString);
+
+// // Simulating changes to the HTML string
+// const newHtmlString = `
+//   <div class="container" id="main">Updated Content</div>
+//   <span style="color: green;">Changed style</span>
+//   <p>Another paragraph</p>
+//   <div><h1>Hello i am God tier programmer</h1></div>
+// `;
+
+// // Update the existing vDom with the new HTML
+// vdom = html(newHtmlString, vdom);
