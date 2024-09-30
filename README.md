@@ -1,4 +1,4 @@
-# TentJS Framework Documentation
+# TentJS
 
 TentJS is a lightweight JavaScript framework designed for efficient DOM manipulation using a Virtual DOM (vDOM) system. It allows you to render dynamic HTML content and apply updates with minimal performance impact by selectively re-rendering only the elements that have changed.
 
